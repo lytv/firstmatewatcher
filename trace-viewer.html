@@ -65,6 +65,13 @@
       color: var(--mute);
       font-size: 0.8rem;
     }
+    .rail-find {
+      padding: 0 0.7rem 0.55rem;
+      display: grid;
+      gap: 0.45rem;
+    }
+    .rail-find .find { width: 100%; }
+    .rail-find .toolbar { margin: 0; }
     .sessions {
       flex: 1;
       overflow: auto;
@@ -355,6 +362,10 @@
         <h1>Watcher</h1>
         <span class="count" id="session-count"></span>
       </div>
+      <div class="rail-find">
+        <input class="find" id="sq" type="search" placeholder="Find a session" aria-label="Find a session" />
+        <div class="toolbar" id="session-chips"></div>
+      </div>
       <div class="sessions" id="sessions" role="listbox" aria-label="Sessions"></div>
     </aside>
     <section class="stage">
@@ -390,6 +401,7 @@
     let selectedId = localStorage.getItem("fm-trace-session") || "";
     let lastStamp = "";
     let sessionOptions = [];
+    let sessionSource = "all";
 
     function groupLabel(g) {
       return { all: "All", bash: "Bash", task: "Tasks", file: "Files", wake: "Wake", other: "Other" }[g] || g;
@@ -406,15 +418,39 @@
       return String(ts).replace("T", " ").replace("Z", "");
     }
 
-    function renderSessionSelect(sessions) {
+    function visibleSessions() {
+      const q = (document.getElementById("sq")?.value || "").trim().toLowerCase();
+      return sessionOptions.filter((s) => {
+        if (sessionSource !== "all" && s.source !== sessionSource) return false;
+        if (!q) return true;
+        const blob = [s.label, s.id, s.runtime, s.source, s.cwd, s.task].join(" ").toLowerCase();
+        return blob.includes(q);
+      });
+    }
+
+    function renderSessionChips() {
+      const root = document.getElementById("session-chips");
+      root.replaceChildren();
+      for (const [id, label] of [["all", "All"], ["live", "Live"], ["leftover", "Leftover"]]) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "chip" + (sessionSource === id ? " is-on" : "");
+        btn.textContent = label;
+        btn.addEventListener("click", () => {
+          sessionSource = id;
+          paintSessions();
+          renderSessionChips();
+        });
+        root.appendChild(btn);
+      }
+    }
+
+    function paintSessions() {
       const root = document.getElementById("sessions");
       const count = document.getElementById("session-count");
-      count.textContent = sessions.length ? String(sessions.length) : "";
-      const same =
-        sessions.length === sessionOptions.length &&
-        sessions.every((s, i) => s.id === sessionOptions[i].id && s.label === sessionOptions[i].label);
-      sessionOptions = sessions;
-      if (!sessions.length) {
+      const shown = visibleSessions();
+      if (!sessionOptions.length) {
+        count.textContent = "";
         root.replaceChildren();
         const empty = document.createElement("p");
         empty.className = "empty";
@@ -423,17 +459,24 @@
         root.appendChild(empty);
         return;
       }
-      const ids = new Set(sessions.map((s) => s.id));
-      if (!selectedId || !ids.has(selectedId)) selectedId = sessions[0].id;
-      localStorage.setItem("fm-trace-session", selectedId);
-      if (same && root.querySelector("[data-id]")) {
-        root.querySelectorAll(".sess").forEach((btn) => {
-          btn.classList.toggle("is-on", btn.dataset.id === selectedId);
-        });
-        return;
+      count.textContent = shown.length === sessionOptions.length
+        ? String(sessionOptions.length)
+        : shown.length + " of " + sessionOptions.length;
+      const ids = new Set(sessionOptions.map((s) => s.id));
+      if (!selectedId || !ids.has(selectedId)) {
+        selectedId = sessionOptions[0].id;
+        localStorage.setItem("fm-trace-session", selectedId);
       }
       root.replaceChildren();
-      for (const s of sessions) {
+      if (!shown.length) {
+        const empty = document.createElement("p");
+        empty.className = "empty";
+        empty.style.padding = "0.8rem";
+        empty.textContent = "No session matches that filter.";
+        root.appendChild(empty);
+        return;
+      }
+      for (const s of shown) {
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "sess" + (s.id === selectedId ? " is-on" : "");
@@ -464,6 +507,20 @@
           });
         });
         root.appendChild(btn);
+      }
+    }
+
+    function renderSessionSelect(sessions) {
+      const same =
+        sessions.length === sessionOptions.length &&
+        sessions.every((s, i) => s.id === sessionOptions[i].id && s.label === sessionOptions[i].label);
+      sessionOptions = sessions;
+      if (!same || !document.querySelector("#sessions [data-id]")) paintSessions();
+      else {
+        document.querySelectorAll(".sess").forEach((btn) => {
+          btn.classList.toggle("is-on", btn.dataset.id === selectedId);
+          btn.setAttribute("aria-selected", btn.dataset.id === selectedId ? "true" : "false");
+        });
       }
     }
 
@@ -639,6 +696,8 @@
       document.getElementById("stale").textContent = String(e);
     }));
     document.getElementById("q").addEventListener("input", renderList);
+    document.getElementById("sq").addEventListener("input", paintSessions);
+    renderSessionChips();
     refresh(true).catch((e) => {
       document.getElementById("stale").textContent = String(e);
     });
