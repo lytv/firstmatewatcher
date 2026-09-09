@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="luxury">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Session trace</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daisyui@5.5.19/daisyui.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daisyui@5.5.19/themes.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.2.4/dist/index.global.js"></script>
+  <style>
+    html, body { overflow-x: hidden; }
+    .min0 { min-width: 0; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+    pre.out {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      max-height: 24rem;
+      overflow: auto;
+    }
+  </style>
+</head>
+<body class="bg-base-100 text-base-content">
+  <main class="mx-auto max-w-6xl min0 p-4 sm:p-6 space-y-6">
+    <header class="space-y-3">
+      <div class="flex flex-wrap items-end justify-between gap-3">
+        <div class="min0">
+          <p class="text-sm opacity-70">Firstmate session viewer</p>
+          <h1 class="text-3xl font-bold" id="title">Session trace</h1>
+          <p class="text-sm break-all opacity-70" id="file"></p>
+        </div>
+        <div class="flex flex-wrap gap-2 items-center">
+          <span class="badge badge-soft" id="source-badge">loading</span>
+          <span class="badge badge-soft" id="stale">loading</span>
+          <button class="btn btn-sm" id="reload" type="button">Reload</button>
+        </div>
+      </div>
+      <label class="form-control w-full min0">
+        <span class="label-text mb-1">Session</span>
+        <select id="session" class="select select-bordered w-full"></select>
+      </label>
+    </header>
+
+    <section id="stats" class="stats stats-vertical lg:stats-horizontal shadow w-full bg-base-200"></section>
+
+    <section class="space-y-3" id="task-board-wrap">
+      <h2 class="text-xl font-bold">Tasks</h2>
+      <div id="task-board" class="grid gap-3 md:grid-cols-2 min0"></div>
+    </section>
+
+    <section class="space-y-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <h2 class="text-xl font-bold mr-2">Calls</h2>
+        <div role="tablist" class="tabs tabs-box tabs-sm flex-wrap" id="filters"></div>
+      </div>
+      <label class="input w-full">
+        <span class="opacity-60">Filter</span>
+        <input id="q" type="search" placeholder="command, path, subject" />
+      </label>
+      <div id="list" class="space-y-2 min0"></div>
+    </section>
+  </main>
+  <script>
+    const fmt = (n) => (n == null ? "-" : Number(n).toLocaleString());
+    let data = null;
+    let filter = "all";
+    let selectedId = localStorage.getItem("fm-trace-session") || "";
+    let lastStamp = "";
+    let sessionOptions = [];
+
+    function groupLabel(g) {
+      return { all: "All", bash: "Bash", task: "Tasks", file: "Files", wake: "Wake", other: "Other" }[g] || g;
+    }
+
+    function statusBadge(status) {
+      const map = {
+        completed: "badge-success",
+        in_progress: "badge-info",
+        pending: "badge-ghost",
+        failed: "badge-error",
+        live: "badge-success",
+        leftover: "badge-warning",
+      };
+      const el = document.createElement("span");
+      el.className = `badge badge-soft ${map[status] || "badge-ghost"}`;
+      el.textContent = status || "unknown";
+      return el;
+    }
+
+    function renderSessionSelect(sessions) {
+      const sel = document.getElementById("session");
+      const same =
+        sessions.length === sessionOptions.length &&
+        sessions.every((s, i) => s.id === sessionOptions[i].id && s.label === sessionOptions[i].label);
+      sessionOptions = sessions;
+      if (same && sel.options.length === sessions.length) {
+        if (selectedId && sel.value !== selectedId) sel.value = selectedId;
+        return;
+      }
+      const keep = selectedId;
+      sel.replaceChildren();
+      if (!sessions.length) {
+        const opt = document.createElement("option");
+        opt.value = "";
+        opt.textContent = "No Firstmate sessions found";
+        sel.appendChild(opt);
+        return;
+      }
+      for (const s of sessions) {
+        const opt = document.createElement("option");
+        opt.value = s.id;
+        opt.textContent = s.label;
+        sel.appendChild(opt);
+      }
+      const ids = new Set(sessions.map((s) => s.id));
+      if (!keep || !ids.has(keep)) selectedId = sessions[0].id;
+      sel.value = selectedId;
+      localStorage.setItem("fm-trace-session", selectedId);
+    }
+
+    function renderStats() {
+      const t = data.tokens || {};
+      const c = data.counts || {};
+      const cells = [
+        ["Calls", data.call_count, `${Object.keys(c).length} kinds`],
+        ["Bash", c.Bash || c.run_terminal_command || 0, "shell commands"],
+        ["Tasks", (data.tasks || []).length, "created"],
+        ["Output tokens", t.output_tokens || 0, `thinking ${fmt(t.thinking_tokens)}`],
+        ["Cache read", t.cache_read_input_tokens || 0, data.token_note || "not full spend"],
+      ];
+      const root = document.getElementById("stats");
+      root.replaceChildren();
+      for (const [title, value, desc] of cells) {
+        const stat = document.createElement("div");
+        stat.className = "stat";
+        stat.innerHTML = `<div class="stat-title"></div><div class="stat-value text-2xl"></div><div class="stat-desc"></div>`;
+        stat.querySelector(".stat-title").textContent = title;
+        stat.querySelector(".stat-value").textContent = fmt(value);
+        stat.querySelector(".stat-desc").textContent = desc;
+        root.appendChild(stat);
+      }
+    }
+
+    function renderTasks() {
+      const wrap = document.getElementById("task-board-wrap");
+      const board = document.getElementById("task-board");
+      const tasks = data.tasks || [];
+      wrap.hidden = tasks.length === 0;
+      board.replaceChildren();
+      for (const task of tasks) {
+        const card = document.createElement("article");
+        card.className = "card card-border bg-base-200 min0";
+        const body = document.createElement("div");
+        body.className = "card-body min0 gap-2";
+        const head = document.createElement("div");
+        head.className = "flex items-start justify-between gap-2";
+        const h = document.createElement("h3");
+        h.className = "card-title text-base";
+        h.textContent = `#${task.id} ${task.subject || "(no subject)"}`;
+        head.append(h, statusBadge(task.status));
+        const p = document.createElement("p");
+        p.className = "text-sm opacity-80";
+        p.textContent = task.description || "";
+        const ul = document.createElement("ul");
+        ul.className = "text-xs opacity-70 space-y-1";
+        for (const ev of task.events || []) {
+          const li = document.createElement("li");
+          li.textContent = `${(ev.ts || "").replace("T", " ").replace("Z", "")}  ${ev.kind}  ${ev.status}`;
+          ul.appendChild(li);
+        }
+        body.append(head, p, ul);
+        card.appendChild(body);
+        board.appendChild(card);
+      }
+    }
+
+    function renderFilters() {
+      const counts = { all: data.call_count || 0 };
+      for (const call of data.calls || []) {
+        counts[call.group] = (counts[call.group] || 0) + 1;
+      }
+      const root = document.getElementById("filters");
+      root.replaceChildren();
+      for (const g of ["all", "bash", "task", "file", "wake", "other"]) {
+        if (g !== "all" && !counts[g]) continue;
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.role = "tab";
+        btn.className = "tab" + (filter === g ? " tab-active" : "");
+        btn.textContent = `${groupLabel(g)} ${counts[g] || 0}`;
+        btn.addEventListener("click", () => { filter = g; renderList(); renderFilters(); });
+        root.appendChild(btn);
+      }
+    }
+
+    function matches(call, q) {
+      if (filter !== "all" && call.group !== filter) return false;
+      if (!q) return true;
+      const blob = `${call.name} ${call.summary} ${JSON.stringify(call.input)} ${call.result}`.toLowerCase();
+      return blob.includes(q);
+    }
+
+    function renderList() {
+      const q = document.getElementById("q").value.trim().toLowerCase();
+      const root = document.getElementById("list");
+      root.replaceChildren();
+      const rows = (data.calls || []).filter((c) => matches(c, q));
+      if (!rows.length) {
+        const empty = document.createElement("p");
+        empty.className = "opacity-60";
+        empty.textContent = "No calls match.";
+        root.appendChild(empty);
+        return;
+      }
+      for (const call of rows) {
+        const det = document.createElement("details");
+        det.className = "collapse collapse-arrow bg-base-200";
+        const sum = document.createElement("summary");
+        sum.className = "collapse-title min0";
+        const row = document.createElement("div");
+        row.className = "flex flex-wrap items-center gap-2 pr-8";
+        const n = document.createElement("span");
+        n.className = "badge badge-neutral";
+        n.textContent = String(call.n);
+        const name = document.createElement("span");
+        name.className = "badge badge-soft " + (call.is_error ? "badge-error" : "badge-primary");
+        name.textContent = call.name;
+        const time = document.createElement("span");
+        time.className = "text-xs opacity-60";
+        time.textContent = (call.ts || "").replace("T", " ").replace("Z", " UTC");
+        const line = document.createElement("code");
+        line.className = "mono text-sm min0 break-all";
+        line.textContent = call.summary;
+        row.append(n, name, time, line);
+        sum.appendChild(row);
+        const body = document.createElement("div");
+        body.className = "collapse-content min0 space-y-3";
+        const inpTitle = document.createElement("h4");
+        inpTitle.className = "font-semibold";
+        inpTitle.textContent = "Input";
+        const inp = document.createElement("pre");
+        inp.className = "out bg-base-300 rounded-box p-3 text-xs mono";
+        const pretty = (call.name === "Bash" || call.name === "run_terminal_command")
+          ? (call.input.command || JSON.stringify(call.input, null, 2))
+          : JSON.stringify(call.input, null, 2);
+        inp.textContent = pretty;
+        const resTitle = document.createElement("h4");
+        resTitle.className = "font-semibold";
+        resTitle.textContent = call.is_error ? "Result (error)" : "Result";
+        const res = document.createElement("pre");
+        res.className = "out bg-base-300 rounded-box p-3 text-xs mono";
+        res.textContent = call.result || "(no result)";
+        body.append(inpTitle, inp, resTitle, res);
+        if (call.truncated) {
+          const note = document.createElement("p");
+          note.className = "text-xs opacity-60";
+          note.textContent = "Result truncated at 80,000 characters.";
+          body.appendChild(note);
+        }
+        det.append(sum, body);
+        root.appendChild(det);
+      }
+    }
+
+    function render() {
+      document.getElementById("title").textContent = data.label || data.session || "Session trace";
+      document.getElementById("file").textContent = data.file || "";
+      const src = document.getElementById("source-badge");
+      src.replaceChildren();
+      src.append(statusBadge(data.source || "unknown"));
+      document.getElementById("stale").textContent = `${data.call_count} calls · live update`;
+      renderStats();
+      renderTasks();
+      renderFilters();
+      renderList();
+    }
+
+    async function loadSessions() {
+      const res = await fetch("/api/sessions.json", { cache: "no-store" });
+      if (!res.ok) throw new Error("sessions " + res.status);
+      const body = await res.json();
+      renderSessionSelect(body.sessions || []);
+      return body.sessions || [];
+    }
+
+    async function loadLog(force) {
+      if (!selectedId) return;
+      const res = await fetch("/api/log.json?id=" + encodeURIComponent(selectedId), { cache: "no-store" });
+      if (!res.ok) throw new Error("log " + res.status);
+      const next = await res.json();
+      const stamp = `${next.id}:${next.mtime}:${next.call_count}:${next.size_bytes}`;
+      if (!force && stamp === lastStamp) return;
+      lastStamp = stamp;
+      data = next;
+      render();
+    }
+
+    async function refresh(force) {
+      await loadSessions();
+      await loadLog(force);
+    }
+
+    document.getElementById("session").addEventListener("change", (ev) => {
+      selectedId = ev.target.value;
+      localStorage.setItem("fm-trace-session", selectedId);
+      lastStamp = "";
+      filter = "all";
+      loadLog(true).catch((e) => {
+        document.getElementById("stale").textContent = String(e);
+      });
+    });
+    document.getElementById("reload").addEventListener("click", () => refresh(true).catch((e) => {
+      document.getElementById("stale").textContent = String(e);
+    }));
+    document.getElementById("q").addEventListener("input", renderList);
+    refresh(true).catch((e) => {
+      document.getElementById("stale").textContent = String(e);
+    });
+    setInterval(() => { refresh(false).catch(() => {}); }, 3000);
+  </script>
+</body>
+</html>
