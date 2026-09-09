@@ -27,7 +27,7 @@ The server loads every matching session at start:
 - Leftover Claude logs for isolated copies
 - Leftover Grok sessions for isolated copies
 
-Use the left list to pick a session. Type in **Find a session** to filter by name, runtime, or path. Use All, Live, or Leftover to narrow the list. The page refreshes every 3 seconds.
+Use the left list to pick a session. The row labeled **this session** is the Grok session that started the server. Type in **Find a session** to filter by name, runtime, or path. Use All, This, Live, or Leftover to narrow the list. The page refreshes every 3 seconds.
 
 ### Useful flags
 

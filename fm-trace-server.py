@@ -384,6 +384,7 @@ def discover(fm_home: Path) -> list[dict]:
             live_by_cwd.setdefault(str(Path(row["cwd"]).resolve()) if row["cwd"] else "", []).append(row)
 
     sessions: list[dict] = []
+    current_grok = os.environ.get("GROK_SESSION_ID", "").strip()
 
     root = claude_projects_root()
     if root.is_dir():
@@ -458,7 +459,11 @@ def discover(fm_home: Path) -> list[dict]:
                     title = str(summary.get("generated_title") or title)
                 except (OSError, json.JSONDecodeError):
                     pass
-                if live_row:
+                if current_grok and session_dir.name == current_grok:
+                    label = "this session"
+                    source = "current"
+                    task = ""
+                elif live_row:
                     label = f"{live_row['kind']} {live_row['task']}  grok"
                     source = "live"
                     task = live_row["task"]
@@ -480,7 +485,8 @@ def discover(fm_home: Path) -> list[dict]:
                     }
                 )
 
-    sessions.sort(key=lambda s: s["mtime"], reverse=True)
+    rank = {"current": 0, "live": 1, "leftover": 2}
+    sessions.sort(key=lambda s: (rank.get(s["source"], 9), -s["mtime"]))
     return sessions
 
 

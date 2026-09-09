@@ -420,18 +420,27 @@
 
     function visibleSessions() {
       const q = (document.getElementById("sq")?.value || "").trim().toLowerCase();
-      return sessionOptions.filter((s) => {
-        if (sessionSource !== "all" && s.source !== sessionSource) return false;
+      const shown = sessionOptions.filter((s) => {
+        if (sessionSource === "live") {
+          if (s.source !== "live" && s.source !== "current") return false;
+        } else if (sessionSource !== "all" && s.source !== sessionSource) {
+          return false;
+        }
         if (!q) return true;
         const blob = [s.label, s.id, s.runtime, s.source, s.cwd, s.task].join(" ").toLowerCase();
         return blob.includes(q);
       });
+      const current = sessionOptions.find((s) => s.source === "current");
+      if (current && !q && !shown.some((s) => s.id === current.id)) {
+        shown.unshift(current);
+      }
+      return shown;
     }
 
     function renderSessionChips() {
       const root = document.getElementById("session-chips");
       root.replaceChildren();
-      for (const [id, label] of [["all", "All"], ["live", "Live"], ["leftover", "Leftover"]]) {
+      for (const [id, label] of [["all", "All"], ["current", "This"], ["live", "Live"], ["leftover", "Leftover"]]) {
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "chip" + (sessionSource === id ? " is-on" : "");
@@ -463,8 +472,9 @@
         ? String(sessionOptions.length)
         : shown.length + " of " + sessionOptions.length;
       const ids = new Set(sessionOptions.map((s) => s.id));
+      const current = sessionOptions.find((s) => s.source === "current");
       if (!selectedId || !ids.has(selectedId)) {
-        selectedId = sessionOptions[0].id;
+        selectedId = (current || sessionOptions[0]).id;
         localStorage.setItem("fm-trace-session", selectedId);
       }
       root.replaceChildren();
@@ -484,14 +494,14 @@
         btn.setAttribute("role", "option");
         btn.setAttribute("aria-selected", s.id === selectedId ? "true" : "false");
         const lamp = document.createElement("span");
-        lamp.className = "lamp " + (s.source === "live" ? "live" : "warn");
+        lamp.className = "lamp " + (s.source === "live" || s.source === "current" ? "live" : "warn");
         const name = document.createElement("span");
         name.className = "name";
         name.prepend(lamp);
         name.append(document.createTextNode(shortLabel(s)));
         const meta = document.createElement("span");
         meta.className = "meta";
-        meta.textContent = (s.source === "live" ? "live" : "leftover") + "  " + (s.runtime || "");
+        meta.textContent = (s.source === "current" ? "this session" : s.source === "live" ? "live" : "leftover") + "  " + (s.runtime || "");
         btn.append(name, meta);
         btn.addEventListener("click", () => {
           selectedId = s.id;
@@ -659,7 +669,7 @@
     function render() {
       document.getElementById("title").textContent = shortLabel(data) || data.session || "Watcher";
       document.getElementById("file").textContent = data.file || "";
-      document.getElementById("source-badge").textContent = data.source || "unknown";
+      document.getElementById("source-badge").textContent = data.source === "current" ? "this session" : (data.source || "unknown");
       document.getElementById("stale").textContent = (data.call_count || 0) + " calls, updating";
       renderStats();
       renderTasks();
