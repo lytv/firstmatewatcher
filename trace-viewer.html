@@ -1,64 +1,388 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="luxury">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Session trace</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daisyui@5.5.19/daisyui.css" />
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daisyui@5.5.19/themes.css" />
-  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.2.4/dist/index.global.js"></script>
+  <title>Watcher</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Source+Sans+3:wght@400;500;600&family=Syne:wght@600;700&display=swap" rel="stylesheet" />
   <style>
-    html, body { overflow-x: hidden; }
-    .min0 { min-width: 0; }
-    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
-    pre.out {
+    :root {
+      --ink: #08131c;
+      --panel: #0d1c28;
+      --line: #1c3345;
+      --fog: #9eb4c4;
+      --paper: #e8eef2;
+      --mute: #6d8494;
+      --signal: #4fd0c6;
+      --signal-dim: #1a4d4a;
+      --warn: #d4a054;
+      --fault: #e07060;
+      --live: #4fd0c6;
+      --rail: 17.5rem;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background: var(--ink);
+      color: var(--paper);
+      font-family: "Source Sans 3", system-ui, sans-serif;
+      font-size: 16px;
+      line-height: 1.45;
+    }
+    button, select, input { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    code, pre, .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; }
+    .app {
+      display: grid;
+      grid-template-columns: var(--rail) minmax(0, 1fr);
+      min-height: 100vh;
+    }
+    .rail {
+      border-right: 1px solid var(--line);
+      background: var(--panel);
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .brand {
+      padding: 1.25rem 1.1rem 0.85rem;
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 0.75rem;
+    }
+    .brand h1 {
+      margin: 0;
+      font-family: Syne, sans-serif;
+      font-size: 1.35rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+    }
+    .count {
+      color: var(--mute);
+      font-size: 0.8rem;
+    }
+    .sessions {
+      flex: 1;
+      overflow: auto;
+      padding: 0.25rem 0.55rem 1rem;
+    }
+    .sess {
+      display: block;
+      width: 100%;
+      text-align: left;
+      background: transparent;
+      border: 0;
+      border-left: 2px solid transparent;
+      border-radius: 0 8px 8px 0;
+      padding: 0.65rem 0.7rem;
+      margin: 0.15rem 0;
+      color: var(--fog);
+    }
+    .sess:hover { background: #122433; color: var(--paper); }
+    .sess:focus-visible { outline: 2px solid var(--signal); outline-offset: -2px; }
+    .sess.is-on {
+      background: #122c33;
+      border-left-color: var(--signal);
+      color: var(--paper);
+    }
+    .sess .name {
+      display: block;
+      font-weight: 600;
+      font-size: 0.92rem;
+      line-height: 1.25;
+    }
+    .sess .meta {
+      display: block;
+      margin-top: 0.2rem;
+      color: var(--mute);
+      font-size: 0.75rem;
+    }
+    .lamp {
+      display: inline-block;
+      width: 0.45rem;
+      height: 0.45rem;
+      border-radius: 50%;
+      background: var(--mute);
+      margin-right: 0.4rem;
+      vertical-align: middle;
+    }
+    .lamp.live {
+      background: var(--signal);
+      box-shadow: 0 0 0 3px var(--signal-dim);
+    }
+    .lamp.warn { background: var(--warn); }
+    .stage {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+    .top {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem 1.25rem;
+      align-items: flex-end;
+      justify-content: space-between;
+      padding: 1.15rem 1.5rem 1rem;
+      border-bottom: 1px solid var(--line);
+    }
+    .who h2 {
+      margin: 0;
+      font-family: Syne, sans-serif;
+      font-size: clamp(1.4rem, 2.4vw, 2rem);
+      font-weight: 700;
+      letter-spacing: -0.04em;
+      line-height: 1.1;
+      max-width: 42rem;
+    }
+    .who p {
+      margin: 0.35rem 0 0;
+      color: var(--mute);
+      font-size: 0.8rem;
+      word-break: break-all;
+      max-width: 48rem;
+    }
+    .actions { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+    .pill {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--fog);
+      border-radius: 999px;
+      padding: 0.25rem 0.7rem;
+      font-size: 0.8rem;
+    }
+    .ghost {
+      border: 1px solid var(--line);
+      background: transparent;
+      color: var(--paper);
+      border-radius: 8px;
+      padding: 0.4rem 0.75rem;
+    }
+    .ghost:hover { border-color: var(--signal); color: var(--signal); }
+    .ghost:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+    .meters {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .meter {
+      padding: 0.9rem 1.25rem 1rem;
+      border-right: 1px solid var(--line);
+      min-width: 0;
+    }
+    .meter:last-child { border-right: 0; }
+    .meter span { display: block; color: var(--mute); font-size: 0.78rem; }
+    .meter strong {
+      display: block;
+      margin-top: 0.15rem;
+      font-family: Syne, sans-serif;
+      font-size: 1.45rem;
+      font-weight: 700;
+      letter-spacing: -0.04em;
+    }
+    .meter em {
+      display: block;
+      margin-top: 0.1rem;
+      color: var(--mute);
+      font-style: normal;
+      font-size: 0.75rem;
+    }
+    .strip {
+      padding: 1rem 1.5rem 0.25rem;
+    }
+    .strip h3 {
+      margin: 0 0 0.65rem;
+      font-size: 0.95rem;
+      font-weight: 600;
+    }
+    .tasks {
+      display: flex;
+      gap: 0.55rem;
+      overflow-x: auto;
+      padding-bottom: 0.75rem;
+    }
+    .task {
+      flex: 0 0 15.5rem;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 0.7rem 0.8rem;
+      min-width: 0;
+    }
+    .task header {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.5rem;
+      align-items: start;
+    }
+    .task h4 {
+      margin: 0;
+      font-size: 0.88rem;
+      font-weight: 600;
+      line-height: 1.3;
+    }
+    .task p {
+      margin: 0.4rem 0 0;
+      color: var(--fog);
+      font-size: 0.78rem;
+    }
+    .st {
+      font-size: 0.72rem;
+      color: var(--mute);
+      white-space: nowrap;
+    }
+    .st.completed { color: var(--signal); }
+    .st.in_progress { color: var(--warn); }
+    .st.failed { color: var(--fault); }
+    .work { padding: 0.5rem 1.5rem 2rem; min-width: 0; }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.55rem;
+      align-items: center;
+      margin-bottom: 0.75rem;
+    }
+    .chip {
+      border: 1px solid var(--line);
+      background: transparent;
+      color: var(--fog);
+      border-radius: 999px;
+      padding: 0.28rem 0.7rem;
+      font-size: 0.82rem;
+    }
+    .chip.is-on {
+      border-color: var(--signal);
+      color: var(--ink);
+      background: var(--signal);
+    }
+    .chip:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+    .find {
+      flex: 1 1 12rem;
+      min-width: 0;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 0.4rem 0.7rem;
+      color: var(--paper);
+    }
+    .find:focus { outline: 2px solid var(--signal); border-color: transparent; }
+    .log { display: flex; flex-direction: column; gap: 0.35rem; }
+    .row {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      min-width: 0;
+    }
+    .row[open] { border-color: #2a4b5e; }
+    .row summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 0.55rem 0.8rem;
+    }
+    .row summary::-webkit-details-marker { display: none; }
+    .row summary:focus-visible { outline: 2px solid var(--signal); outline-offset: -2px; }
+    .line {
+      display: grid;
+      grid-template-columns: 2.1rem 7.2rem 7.6rem minmax(0, 1fr);
+      gap: 0.55rem;
+      align-items: start;
+    }
+    .n { color: var(--mute); font-size: 0.78rem; padding-top: 0.12rem; }
+    .tool {
+      font-size: 0.78rem;
+      color: var(--signal);
+      padding-top: 0.12rem;
+    }
+    .tool.bad { color: var(--fault); }
+    .when { color: var(--mute); font-size: 0.72rem; padding-top: 0.18rem; }
+    .sum {
+      margin: 0;
+      font-size: 0.8rem;
+      line-height: 1.4;
+      color: var(--paper);
       white-space: pre-wrap;
       overflow-wrap: anywhere;
-      max-height: 24rem;
+    }
+    .body {
+      border-top: 1px solid var(--line);
+      padding: 0.7rem 0.8rem 0.9rem;
+      display: grid;
+      gap: 0.65rem;
+    }
+    .body h4 {
+      margin: 0 0 0.3rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--mute);
+    }
+    .out {
+      margin: 0;
+      background: var(--ink);
+      border-radius: 6px;
+      padding: 0.65rem 0.7rem;
+      font-size: 0.75rem;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      max-height: 22rem;
       overflow: auto;
+      color: var(--fog);
+    }
+    .empty { color: var(--mute); padding: 1.5rem 0; }
+    @media (max-width: 900px) {
+      .app { grid-template-columns: 1fr; }
+      .rail { border-right: 0; border-bottom: 1px solid var(--line); max-height: 40vh; }
+      .meters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .meter:nth-child(odd) { border-right: 1px solid var(--line); }
+      .meter { border-bottom: 1px solid var(--line); }
+      .line { grid-template-columns: 2rem 1fr; }
+      .when { display: none; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      * { transition: none !important; }
     }
   </style>
 </head>
-<body class="bg-base-100 text-base-content">
-  <main class="mx-auto max-w-6xl min0 p-4 sm:p-6 space-y-6">
-    <header class="space-y-3">
-      <div class="flex flex-wrap items-end justify-between gap-3">
-        <div class="min0">
-          <p class="text-sm opacity-70">Firstmate session viewer</p>
-          <h1 class="text-3xl font-bold" id="title">Session trace</h1>
-          <p class="text-sm break-all opacity-70" id="file"></p>
-        </div>
-        <div class="flex flex-wrap gap-2 items-center">
-          <span class="badge badge-soft" id="source-badge">loading</span>
-          <span class="badge badge-soft" id="stale">loading</span>
-          <button class="btn btn-sm" id="reload" type="button">Reload</button>
-        </div>
+<body>
+  <div class="app">
+    <aside class="rail">
+      <div class="brand">
+        <h1>Watcher</h1>
+        <span class="count" id="session-count"></span>
       </div>
-      <label class="form-control w-full min0">
-        <span class="label-text mb-1">Session</span>
-        <select id="session" class="select select-bordered w-full"></select>
-      </label>
-    </header>
-
-    <section id="stats" class="stats stats-vertical lg:stats-horizontal shadow w-full bg-base-200"></section>
-
-    <section class="space-y-3" id="task-board-wrap">
-      <h2 class="text-xl font-bold">Tasks</h2>
-      <div id="task-board" class="grid gap-3 md:grid-cols-2 min0"></div>
-    </section>
-
-    <section class="space-y-3">
-      <div class="flex flex-wrap items-center gap-2">
-        <h2 class="text-xl font-bold mr-2">Calls</h2>
-        <div role="tablist" class="tabs tabs-box tabs-sm flex-wrap" id="filters"></div>
+      <div class="sessions" id="sessions" role="listbox" aria-label="Sessions"></div>
+    </aside>
+    <section class="stage">
+      <header class="top">
+        <div class="who min0">
+          <h2 id="title">Pick a session</h2>
+          <p id="file"></p>
+        </div>
+        <div class="actions">
+          <span class="pill" id="source-badge">loading</span>
+          <span class="pill" id="stale"></span>
+          <button class="ghost" id="reload" type="button">Reload</button>
+        </div>
+      </header>
+      <div class="meters" id="stats"></div>
+      <div class="strip" id="task-board-wrap" hidden>
+        <h3>Tasks</h3>
+        <div class="tasks" id="task-board"></div>
       </div>
-      <label class="input w-full">
-        <span class="opacity-60">Filter</span>
-        <input id="q" type="search" placeholder="command, path, subject" />
-      </label>
-      <div id="list" class="space-y-2 min0"></div>
+      <div class="work">
+        <div class="toolbar">
+          <div id="filters"></div>
+          <input class="find" id="q" type="search" placeholder="Find a command" />
+        </div>
+        <div class="log" id="list"></div>
+      </div>
     </section>
-  </main>
+  </div>
   <script>
     const fmt = (n) => (n == null ? "-" : Number(n).toLocaleString());
     let data = null;
@@ -71,72 +395,101 @@
       return { all: "All", bash: "Bash", task: "Tasks", file: "Files", wake: "Wake", other: "Other" }[g] || g;
     }
 
-    function statusBadge(status) {
-      const map = {
-        completed: "badge-success",
-        in_progress: "badge-info",
-        pending: "badge-ghost",
-        failed: "badge-error",
-        live: "badge-success",
-        leftover: "badge-warning",
-      };
-      const el = document.createElement("span");
-      el.className = `badge badge-soft ${map[status] || "badge-ghost"}`;
-      el.textContent = status || "unknown";
-      return el;
+    function shortLabel(s) {
+      return String(s.label || s.id || "")
+        .replace(/^\[live\]\s*/i, "")
+        .replace(/^\[leftover\]\s*/i, "");
+    }
+
+    function clock(ts) {
+      if (!ts) return "";
+      return String(ts).replace("T", " ").replace("Z", "");
     }
 
     function renderSessionSelect(sessions) {
-      const sel = document.getElementById("session");
+      const root = document.getElementById("sessions");
+      const count = document.getElementById("session-count");
+      count.textContent = sessions.length ? String(sessions.length) : "";
       const same =
         sessions.length === sessionOptions.length &&
         sessions.every((s, i) => s.id === sessionOptions[i].id && s.label === sessionOptions[i].label);
       sessionOptions = sessions;
-      if (same && sel.options.length === sessions.length) {
-        if (selectedId && sel.value !== selectedId) sel.value = selectedId;
-        return;
-      }
-      const keep = selectedId;
-      sel.replaceChildren();
       if (!sessions.length) {
-        const opt = document.createElement("option");
-        opt.value = "";
-        opt.textContent = "No Firstmate sessions found";
-        sel.appendChild(opt);
+        root.replaceChildren();
+        const empty = document.createElement("p");
+        empty.className = "empty";
+        empty.style.padding = "0.8rem";
+        empty.textContent = "No sessions yet. Start a Firstmate worker, then reload.";
+        root.appendChild(empty);
         return;
-      }
-      for (const s of sessions) {
-        const opt = document.createElement("option");
-        opt.value = s.id;
-        opt.textContent = s.label;
-        sel.appendChild(opt);
       }
       const ids = new Set(sessions.map((s) => s.id));
-      if (!keep || !ids.has(keep)) selectedId = sessions[0].id;
-      sel.value = selectedId;
+      if (!selectedId || !ids.has(selectedId)) selectedId = sessions[0].id;
       localStorage.setItem("fm-trace-session", selectedId);
+      if (same && root.querySelector("[data-id]")) {
+        root.querySelectorAll(".sess").forEach((btn) => {
+          btn.classList.toggle("is-on", btn.dataset.id === selectedId);
+        });
+        return;
+      }
+      root.replaceChildren();
+      for (const s of sessions) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "sess" + (s.id === selectedId ? " is-on" : "");
+        btn.dataset.id = s.id;
+        btn.setAttribute("role", "option");
+        btn.setAttribute("aria-selected", s.id === selectedId ? "true" : "false");
+        const lamp = document.createElement("span");
+        lamp.className = "lamp " + (s.source === "live" ? "live" : "warn");
+        const name = document.createElement("span");
+        name.className = "name";
+        name.prepend(lamp);
+        name.append(document.createTextNode(shortLabel(s)));
+        const meta = document.createElement("span");
+        meta.className = "meta";
+        meta.textContent = (s.source === "live" ? "live" : "leftover") + "  " + (s.runtime || "");
+        btn.append(name, meta);
+        btn.addEventListener("click", () => {
+          selectedId = s.id;
+          localStorage.setItem("fm-trace-session", selectedId);
+          lastStamp = "";
+          filter = "all";
+          root.querySelectorAll(".sess").forEach((el) => {
+            el.classList.toggle("is-on", el.dataset.id === selectedId);
+            el.setAttribute("aria-selected", el.dataset.id === selectedId ? "true" : "false");
+          });
+          loadLog(true).catch((e) => {
+            document.getElementById("stale").textContent = String(e);
+          });
+        });
+        root.appendChild(btn);
+      }
     }
 
     function renderStats() {
       const t = data.tokens || {};
       const c = data.counts || {};
       const cells = [
-        ["Calls", data.call_count, `${Object.keys(c).length} kinds`],
-        ["Bash", c.Bash || c.run_terminal_command || 0, "shell commands"],
+        ["Calls", data.call_count, Object.keys(c).length + " kinds"],
+        ["Bash", c.Bash || c.run_terminal_command || 0, "shell"],
         ["Tasks", (data.tasks || []).length, "created"],
-        ["Output tokens", t.output_tokens || 0, `thinking ${fmt(t.thinking_tokens)}`],
-        ["Cache read", t.cache_read_input_tokens || 0, data.token_note || "not full spend"],
+        ["Output", t.output_tokens || 0, "thinking " + fmt(t.thinking_tokens)],
+        ["Cache read", t.cache_read_input_tokens || 0, data.token_note || "not spend"],
       ];
       const root = document.getElementById("stats");
       root.replaceChildren();
       for (const [title, value, desc] of cells) {
-        const stat = document.createElement("div");
-        stat.className = "stat";
-        stat.innerHTML = `<div class="stat-title"></div><div class="stat-value text-2xl"></div><div class="stat-desc"></div>`;
-        stat.querySelector(".stat-title").textContent = title;
-        stat.querySelector(".stat-value").textContent = fmt(value);
-        stat.querySelector(".stat-desc").textContent = desc;
-        root.appendChild(stat);
+        const el = document.createElement("div");
+        el.className = "meter";
+        const s = document.createElement("span");
+        s.textContent = title;
+        const strong = document.createElement("strong");
+        strong.textContent = fmt(value);
+        const em = document.createElement("em");
+        em.textContent = desc;
+        el.append(s, strong, em);
+        root.appendChild(el);
       }
     }
 
@@ -148,27 +501,17 @@
       board.replaceChildren();
       for (const task of tasks) {
         const card = document.createElement("article");
-        card.className = "card card-border bg-base-200 min0";
-        const body = document.createElement("div");
-        body.className = "card-body min0 gap-2";
-        const head = document.createElement("div");
-        head.className = "flex items-start justify-between gap-2";
-        const h = document.createElement("h3");
-        h.className = "card-title text-base";
-        h.textContent = `#${task.id} ${task.subject || "(no subject)"}`;
-        head.append(h, statusBadge(task.status));
+        card.className = "task";
+        const head = document.createElement("header");
+        const h = document.createElement("h4");
+        h.textContent = "#" + task.id + " " + (task.subject || "(no subject)");
+        const st = document.createElement("span");
+        st.className = "st " + (task.status || "");
+        st.textContent = task.status || "unknown";
+        head.append(h, st);
         const p = document.createElement("p");
-        p.className = "text-sm opacity-80";
         p.textContent = task.description || "";
-        const ul = document.createElement("ul");
-        ul.className = "text-xs opacity-70 space-y-1";
-        for (const ev of task.events || []) {
-          const li = document.createElement("li");
-          li.textContent = `${(ev.ts || "").replace("T", " ").replace("Z", "")}  ${ev.kind}  ${ev.status}`;
-          ul.appendChild(li);
-        }
-        body.append(head, p, ul);
-        card.appendChild(body);
+        card.append(head, p);
         board.appendChild(card);
       }
     }
@@ -184,9 +527,8 @@
         if (g !== "all" && !counts[g]) continue;
         const btn = document.createElement("button");
         btn.type = "button";
-        btn.role = "tab";
-        btn.className = "tab" + (filter === g ? " tab-active" : "");
-        btn.textContent = `${groupLabel(g)} ${counts[g] || 0}`;
+        btn.className = "chip" + (filter === g ? " is-on" : "");
+        btn.textContent = groupLabel(g) + " " + (counts[g] || 0);
         btn.addEventListener("click", () => { filter = g; renderList(); renderFilters(); });
         root.appendChild(btn);
       }
@@ -195,7 +537,7 @@
     function matches(call, q) {
       if (filter !== "all" && call.group !== filter) return false;
       if (!q) return true;
-      const blob = `${call.name} ${call.summary} ${JSON.stringify(call.input)} ${call.result}`.toLowerCase();
+      const blob = (call.name + " " + call.summary + " " + JSON.stringify(call.input) + " " + call.result).toLowerCase();
       return blob.includes(q);
     }
 
@@ -206,53 +548,49 @@
       const rows = (data.calls || []).filter((c) => matches(c, q));
       if (!rows.length) {
         const empty = document.createElement("p");
-        empty.className = "opacity-60";
-        empty.textContent = "No calls match.";
+        empty.className = "empty";
+        empty.textContent = "Nothing matches that search.";
         root.appendChild(empty);
         return;
       }
       for (const call of rows) {
         const det = document.createElement("details");
-        det.className = "collapse collapse-arrow bg-base-200";
+        det.className = "row";
         const sum = document.createElement("summary");
-        sum.className = "collapse-title min0";
-        const row = document.createElement("div");
-        row.className = "flex flex-wrap items-center gap-2 pr-8";
+        const line = document.createElement("div");
+        line.className = "line";
         const n = document.createElement("span");
-        n.className = "badge badge-neutral";
-        n.textContent = String(call.n);
+        n.className = "n mono";
+        n.textContent = String(call.n).padStart(2, "0");
         const name = document.createElement("span");
-        name.className = "badge badge-soft " + (call.is_error ? "badge-error" : "badge-primary");
+        name.className = "tool" + (call.is_error ? " bad" : "");
         name.textContent = call.name;
         const time = document.createElement("span");
-        time.className = "text-xs opacity-60";
-        time.textContent = (call.ts || "").replace("T", " ").replace("Z", " UTC");
-        const line = document.createElement("code");
-        line.className = "mono text-sm min0 break-all";
-        line.textContent = call.summary;
-        row.append(n, name, time, line);
-        sum.appendChild(row);
+        time.className = "when";
+        time.textContent = clock(call.ts);
+        const cmd = document.createElement("pre");
+        cmd.className = "sum mono";
+        cmd.textContent = call.summary;
+        line.append(n, name, time, cmd);
+        sum.appendChild(line);
         const body = document.createElement("div");
-        body.className = "collapse-content min0 space-y-3";
+        body.className = "body";
         const inpTitle = document.createElement("h4");
-        inpTitle.className = "font-semibold";
         inpTitle.textContent = "Input";
         const inp = document.createElement("pre");
-        inp.className = "out bg-base-300 rounded-box p-3 text-xs mono";
-        const pretty = (call.name === "Bash" || call.name === "run_terminal_command")
+        inp.className = "out";
+        inp.textContent = (call.name === "Bash" || call.name === "run_terminal_command")
           ? (call.input.command || JSON.stringify(call.input, null, 2))
           : JSON.stringify(call.input, null, 2);
-        inp.textContent = pretty;
         const resTitle = document.createElement("h4");
-        resTitle.className = "font-semibold";
         resTitle.textContent = call.is_error ? "Result (error)" : "Result";
         const res = document.createElement("pre");
-        res.className = "out bg-base-300 rounded-box p-3 text-xs mono";
+        res.className = "out";
         res.textContent = call.result || "(no result)";
         body.append(inpTitle, inp, resTitle, res);
         if (call.truncated) {
           const note = document.createElement("p");
-          note.className = "text-xs opacity-60";
+          note.className = "empty";
           note.textContent = "Result truncated at 80,000 characters.";
           body.appendChild(note);
         }
@@ -262,12 +600,10 @@
     }
 
     function render() {
-      document.getElementById("title").textContent = data.label || data.session || "Session trace";
+      document.getElementById("title").textContent = shortLabel(data) || data.session || "Watcher";
       document.getElementById("file").textContent = data.file || "";
-      const src = document.getElementById("source-badge");
-      src.replaceChildren();
-      src.append(statusBadge(data.source || "unknown"));
-      document.getElementById("stale").textContent = `${data.call_count} calls · live update`;
+      document.getElementById("source-badge").textContent = data.source || "unknown";
+      document.getElementById("stale").textContent = (data.call_count || 0) + " calls, updating";
       renderStats();
       renderTasks();
       renderFilters();
@@ -276,7 +612,7 @@
 
     async function loadSessions() {
       const res = await fetch("/api/sessions.json", { cache: "no-store" });
-      if (!res.ok) throw new Error("sessions " + res.status);
+      if (!res.ok) throw new Error("Could not load sessions (" + res.status + ")");
       const body = await res.json();
       renderSessionSelect(body.sessions || []);
       return body.sessions || [];
@@ -285,9 +621,9 @@
     async function loadLog(force) {
       if (!selectedId) return;
       const res = await fetch("/api/log.json?id=" + encodeURIComponent(selectedId), { cache: "no-store" });
-      if (!res.ok) throw new Error("log " + res.status);
+      if (!res.ok) throw new Error("Could not load this session (" + res.status + ")");
       const next = await res.json();
-      const stamp = `${next.id}:${next.mtime}:${next.call_count}:${next.size_bytes}`;
+      const stamp = next.id + ":" + next.mtime + ":" + next.call_count + ":" + next.size_bytes;
       if (!force && stamp === lastStamp) return;
       lastStamp = stamp;
       data = next;
@@ -299,15 +635,6 @@
       await loadLog(force);
     }
 
-    document.getElementById("session").addEventListener("change", (ev) => {
-      selectedId = ev.target.value;
-      localStorage.setItem("fm-trace-session", selectedId);
-      lastStamp = "";
-      filter = "all";
-      loadLog(true).catch((e) => {
-        document.getElementById("stale").textContent = String(e);
-      });
-    });
     document.getElementById("reload").addEventListener("click", () => refresh(true).catch((e) => {
       document.getElementById("stale").textContent = String(e);
     }));

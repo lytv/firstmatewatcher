@@ -406,11 +406,11 @@ def discover(fm_home: Path) -> list[dict]:
             sid = f"claude:{jsonl.stem}"
             label_cwd = Path(cwd).name or cwd
             if live_row:
-                label = f"[live] {live_row['kind']} {live_row['task']} · claude"
+                label = f"{live_row['kind']} {live_row['task']}  claude"
                 source = "live"
                 task = live_row["task"]
             else:
-                label = f"[leftover] {label_cwd} · claude · {jsonl.stem[:8]}"
+                label = f"{label_cwd}  claude  {jsonl.stem[:8]}"
                 source = "leftover"
                 task = ""
             sessions.append(
@@ -459,11 +459,11 @@ def discover(fm_home: Path) -> list[dict]:
                 except (OSError, json.JSONDecodeError):
                     pass
                 if live_row:
-                    label = f"[live] {live_row['kind']} {live_row['task']} · grok"
+                    label = f"{live_row['kind']} {live_row['task']}  grok"
                     source = "live"
                     task = live_row["task"]
                 else:
-                    label = f"[leftover] {Path(cwd).name or cwd} · grok · {title}"
+                    label = f"{Path(cwd).name or cwd}  grok  {title}"
                     source = "leftover"
                     task = ""
                 sessions.append(
