@@ -2,6 +2,8 @@
 
 Local viewer for Firstmate worker sessions. It lists tool calls, tasks, and token counts from logs on your machine. It does not send data to the network. It binds to `127.0.0.1` only.
 
+License: MIT. See `LICENSE`.
+
 ## What you need
 
 - Python 3.9 or newer
